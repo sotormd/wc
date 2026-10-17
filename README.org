@@ -1,0 +1,94 @@
+#+TITLE: webclub (systems & security)
+#+AUTHOR: sotormd
+#+EMAIL: sotormd@proton.me
+
+* notice
+
+the original problem involved using Ubuntu, this solution uses [[foobar][https://github.com/sotormd/foo]], which is a minimal lfs-like system provisioned
+using the [[Nix][https://nixos.org/download]] package manager and the [[Nixpkgs][https://github.com/nixos/nixpkgs]] package repository.
+
+secureboot support was added to foobar in [[foo#1][https://github.com/sotormd/foo/pull/1]] specifically for this challenge.
+
+differences between Ubuntu and foobar:
+
+- foobar does not use systemd, it does not use a service manager at all
+- foobar is provisioned using Nix, which guarantees reproducibility
+- foobar has no real "defaults" and everything is largely up to the user
+- for all practical purposes, foobar just describes the commands that should run
+  in initrd and init (PID 1), everything else is a subsequent consequence
+
+* installing
+
+** building disk image
+
+foobar provides a ~diskImage~ output which, by default, creates a fat32 /boot with the foobar uki and bootloader, and a xfs rootfs
+
+#+BEGIN_SRC bash
+  nix build -f foobar build.diskImage
+  cp result image.raw
+#+END_SRC
+
+** first boot
+
+this can be booted with qemu. since we want secureboot support we need ~OVMF_CODE.secboot.fd~ and ~OVMF_VARS.secboot.fd~, i used the ones from Fedora's koji builds.
+
+make sure to disable secure boot for the first boot (see next section). to disable secure boot, reboot into the firmware interface and uncheck ~Attempt Secure Boot~.
+
+#+BEGIN_SRC bash
+  qemu-system-x86_64 \
+  -machine q35,smm=on,accel=kvm \
+  -m 16G \
+  -smp 6 \
+  -global driver=cfi.pflash01,property=secure,value=on \
+  -drive if=pflash,format=raw,unit=0,file="OVMF_CODE.secboot.fd",readonly=on \
+  -drive if=pflash,format=raw,unit=1,file="OVMF_VARS.secboot.fd" \
+  -device ahci,id=ahci \
+  -drive id=disk,file="image.raw",format=raw,if=none \
+  -device ide-hd,drive=disk,bus=ahci.0 \
+  -netdev user,id=net0 \
+  -device virtio-net-pci,netdev=net0 \
+  -nographic
+#+END_SRC
+
+** secure boot
+
+unlike Ubuntu, foobar does not use the microsoft secure boot shim. this means that we need to sign the uki & bootloader for each generation ourselves.
+luckily, foobar already has decent secureboot support ootb.
+
+in order to enroll our own keys, we must boot in Setup Mode. with the qemu ovmf firmware, this can be done by deleting any existing Platform Key(s).
+reboot into the firmware interface and click ~Reset all Secure Boot keys~. next time we boot, we will be in Setup Mode.
+
+once booted, we can use the new ~foobar-generate-secureboot-keys~ and ~foobar-enroll-secureboot-keys~, which use ~sbctl~ to create and enroll a PK, KEK and signing db key and cert.
+
+log in as root (password: root)
+
+#+BEGIN_SRC bash
+  foobar-generate-secureboot-keys
+  foobar-enroll-secureboot-keys
+#+END_SRC
+
+at this stage, we have enrolled the keys but our uki & bootloader are unsigned. we will use ~foobar-rebuild~ to rebuild a new generation with ~secureBootEnabled~ set to true
+
+log in as foo (password: foo)
+
+#+BEGIN_SRC bash
+  git clone https://github.com/sotormd/wc
+  vi wc/config-2-secureboot.nix
+#+END_SRC
+
+now we can rebuild this, log in as root again
+
+#+BEGIN_SRC bash
+  export FOOBAR_CONFIG=/home/foo/wc/config-2-secureboot.nix
+  foobar-rebuild switch
+#+END_SRC
+
+reboot and notice that the firmware prevents booting into generation 1. only generation 2 works since it uses a signed uki.
+
+* encrypt the root partition in place
+
+on Ubuntu, this would usually be done using a live ISO. since foobar uses the nixos-like concept of "generations" we simply need a generation where
+the real root is never mounted. this can be done by either a. mounting a real system as tmpfs or b. never leaving initrd.
+
+
+
