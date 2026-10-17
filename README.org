@@ -4,10 +4,10 @@
 
 * notice
 
-the original problem involved using Ubuntu, this solution uses [[foobar][https://github.com/sotormd/foo]], which is a minimal lfs-like system provisioned
-using the [[Nix][https://nixos.org/download]] package manager and the [[Nixpkgs][https://github.com/nixos/nixpkgs]] package repository.
+the original problem involved using Ubuntu, this solution uses [[https://github.com/sotormd/foo][foobar]], which is a minimal lfs-like system provisioned
+using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository.
 
-secureboot support was added to foobar in [[foo#1][https://github.com/sotormd/foo/pull/1]] specifically for this challenge.
+secureboot support was added to foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
 
 differences between Ubuntu and foobar:
 
@@ -67,7 +67,9 @@ log in as root (password: root)
   foobar-enroll-secureboot-keys
 #+END_SRC
 
-at this stage, we have enrolled the keys but our uki & bootloader are unsigned. we will use ~foobar-rebuild~ to rebuild a new generation with ~secureBootEnabled~ set to true
+at this stage, we have enrolled the keys but our uki & bootloader are unsigned. we will use ~foobar-rebuild~ to rebuild a new generation with ~secureBootEnabled~ set to true.
+
+the `config-2-secureboot.nix` file provides one such configuration.
 
 log in as foo (password: foo)
 
@@ -90,5 +92,13 @@ reboot and notice that the firmware prevents booting into generation 1. only gen
 on Ubuntu, this would usually be done using a live ISO. since foobar uses the nixos-like concept of "generations" we simply need a generation where
 the real root is never mounted. this can be done by either a. mounting a real system as tmpfs or b. never leaving initrd.
 
+the `config-3-initrd-shell` provides one such configuration.
+
+#+BEGIN_SRC bash
+  export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
+  foobar-rebuild switch
+#+END_SRC
+
+now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place
 
 
