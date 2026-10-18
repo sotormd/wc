@@ -68,7 +68,7 @@ Differences between vanilla NixOS and foobar:
 - no layer of abstraction over simple shell scripts
 - many NixOS concepts (activation, generations, nixos-rebuild)
   have semi-equivalent implementations for foobar
-- `/etc` is an EROFS image instead of a symlink farm
+- ~/etc~ is an EROFS image instead of a symlink farm
 
 It is *highly* recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
 
@@ -86,7 +86,7 @@ Before we proceed, we should fetch foobar so we can extend it:
   configuration
 #+END_SRC
 
-The above expression is tangled to [[foobar.nix][~foobar.nix~]]. this can be used for all subsequent extensions.
+The above expression is tangled to [[foobar.nix][foobar.nix]]. this can be used for all subsequent extensions.
 
 ** Installing
 
@@ -109,7 +109,7 @@ anything about the default configuration. The configuration will look like this:
   configuration
 #+END_SRC
 
-The above expression is tangled to [[config-1-install.nix][~config-1-install.nix~]].
+The above expression is tangled to [[config-1-install.nix][config-1-install.nix]].
 
 #+BEGIN_SRC console
   $ git clone https://github.com/sotormd/wc && cd wc
@@ -123,7 +123,7 @@ This gives us a ~image.raw~ that we can work with.
 
 The generated image can be booted using QEMU. Since we want secureboot support we need ~OVMF_CODE.secboot.fd~
 and ~OVMF_VARS.secboot.fd~. I used the ones from Fedora's koji builds, they are included in this repository
-under [[assets][~./assets/~]].
+under [[assets][assets]].
 
 Unlike Ubuntu, foobar does not (and cannot) use Microsoft's secureboot shim. This means that the only way to
 use secureboot is to enroll our own PK, KEK, and db certs. So, we have to disable secureboot for the first boot.
@@ -179,7 +179,7 @@ rebuild a new generation with ~secureBootEnabled~ set to true.
   finalConfiguration
 #+END_SRC
 
-The above expression is tangled to [[config-2-secureboot.nix][~config-2-secureboot.nix~]].
+The above expression is tangled to [[config-2-secureboot.nix][config-2-secureboot.nix]].
 
 #+BEGIN_SRC console
   % git clone https://github.com/sotormd/wc
@@ -226,7 +226,7 @@ For this task, we will create a generation that never leaves initrd.
   finalConfiguration
 #+END_SRC
 
-The above expression is tangled to [[config-3-initrd-shell.nix][~config-3-initrd-shell.nix~]].
+The above expression is tangled to [[config-3-initrd-shell.nix][config-3-initrd-shell.nix]].
 
 #+BEGIN_SRC console
   # export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
