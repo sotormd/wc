@@ -2,13 +2,11 @@ let
   configuration = import ./foobar.nix;
 
   finalConfiguration = configuration.extend (
-    final: prev: let
-      inherit (final) pkgs;
-    in
+    final: prev:
     {
       secureBootEnabled = true;
       initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
-      initrdPackages = prev.initrdPackages ++ [ pkgs.cryptsetup pkgs.bashInteractive ];
+      initrdPackages = [ final.pkgs.busybox final.pkgs.cryptsetup final.pkgs.bashInteractive ];
       initrdCommands = ''
         mkdir -p /proc /sys /dev
         mount -t proc proc /proc

@@ -5,5 +5,20 @@ let
   };
 
   configuration = import "${foo}/foobar/configuration.nix";
+  
+  finalConfiguration = configuration.extend (
+    final: prev:
+    {
+      activateCommands = builtins.concatStringsSep "\n" [
+        prev.activateCommands
+        ''
+        echo activate: linking configs
+
+        ln -s ${./.} /run/configs
+        ''
+      ];
+      diskImageSize = "20G";
+    }
+  );
 in
-configuration
+finalConfiguration

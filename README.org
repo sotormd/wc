@@ -11,9 +11,9 @@ Submission for WebClub (Systems & Security) & IRIS.
 
 This section covers my prior work in related fields.
 
+*For the task submission, see [[#task][Task]].*
+
 ** Homelab
-
-
 
 ** Nix/NixOS
 
@@ -82,11 +82,31 @@ Before we proceed, we should fetch foobar so we can extend it:
     };
 
     configuration = import "${foo}/foobar/configuration.nix";
+    
+    finalConfiguration = configuration.extend (
+      final: prev:
+      {
+        activateCommands = builtins.concatStringsSep "\n" [
+          prev.activateCommands
+          ''
+          echo activate: linking configs
+
+          ln -s ${./.} /run/configs
+          ''
+        ];
+        diskImageSize = "20G";
+      }
+    );
   in
-  configuration
+  finalConfiguration
 #+END_SRC
 
 The above expression is tangled to [[foobar.nix][foobar.nix]]. this can be used for all subsequent extensions.
+
+Note that we also add a activation hook that links all configs to ~/run/configs~ so that we can
+switch to future generations without cloning this repository.
+
+We also increase the disk image size from 5G to 20G.
 
 ** Installing
 
@@ -184,11 +204,7 @@ rebuild a new generation with ~secureBootEnabled~ set to true.
 The above expression is tangled to [[config-2-secureboot.nix][config-2-secureboot.nix]].
 
 #+BEGIN_SRC console
-  % git clone https://github.com/sotormd/wc ~/wc
-#+END_SRC
-
-#+BEGIN_SRC console
-  # export FOOBAR_CONFIG=/home/foo/wc/config-2-secureboot.nix
+  # export FOOBAR_CONFIG=/run/configs/config-2-secureboot.nix
   # foobar-rebuild boot
 #+END_SRC
 
@@ -211,13 +227,11 @@ For this task, we will create a generation that never leaves initrd.
     configuration = import ./foobar.nix;
 
     finalConfiguration = configuration.extend (
-      final: prev: let
-        inherit (final) pkgs;
-      in
+      final: prev:
       {
         secureBootEnabled = true;
         initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
-        initrdPackages = prev.initrdPackages ++ [ pkgs.cryptsetup pkgs.bashInteractive ];
+        initrdPackages = [ final.pkgs.busybox final.pkgs.cryptsetup final.pkgs.bashInteractive ];
         initrdCommands = ''
           mkdir -p /proc /sys /dev
           mount -t proc proc /proc
@@ -237,7 +251,7 @@ For this task, we will create a generation that never leaves initrd.
 The above expression is tangled to [[config-3-initrd-shell.nix][config-3-initrd-shell.nix]].
 
 #+BEGIN_SRC console
-  # export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
+  # export FOOBAR_CONFIG=/run/configs/config-3-initrd-shell.nix
   # foobar-rebuild boot
 #+END_SRC
 
