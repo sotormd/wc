@@ -1,26 +1,53 @@
-#+TITLE: webclub (systems & security)
+#+TITLE: WebClub (Systems & Security) & IRIS
 #+AUTHOR: sotormd
 #+EMAIL: sotormd@proton.me
-#+TOC: headlines 3
 
-** introduction
+Submission for WebClub (Systems & Security) & IRIS.
 
-*** notation for command blocks
+- [[#prior-work][Prior Work]]
+- [[#task][Task]]
 
-command blocks starting with ~$~ are to be ran on the host
+* Prior Work
 
-command blocks starting with ~%~ are to be ran as user ~foo~ on the foobar vm
+This section covers my prior work in related fields.
 
-command blocks starting with ~#~ are to be ran as user ~root~ on the foobar vm
+** Homelab
 
-** operating system - foobar
 
-the original problem involved using Ubuntu, this solution uses [[https://github.com/sotormd/foo][foobar]], which is a minimal lfs-like system provisioned
-using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository.
 
-foobar is my own project. secureboot support was added to foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
+** Nix/NixOS
 
-differences between Ubuntu and foobar:
+** Projects
+
+** Other contributions
+
+* Task
+
+The chosen task is "Operating Systems".
+
+** Introduction
+
+The task involves the following goals:
+
+- Secure boot in user mode
+- Encrypt a disk in-place using ~cryptsetup reencrypt~
+- TPM 2.0 unlocking with relevant PCRs
+
+*** Notation for command blocks
+
+Command blocks starting with ~$~ are to be ran on the host.
+
+Command blocks starting with ~%~ are to be ran as user ~foo~ on the foobar vm.
+
+Command blocks starting with ~#~ are to be ran as user ~root~ on the foobar vm.
+
+** Operating System - foobar
+
+The original problem involved using Ubuntu. This solution uses my own project, [[https://github.com/sotormd/foo][foobar]], which is a minimal lfs-like
+system provisioned using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository. Secureboot support was added to
+foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
+
+Differences between Ubuntu and foobar:
 
 - foobar does not use systemd, it does not use a service manager at all
 - foobar is provisioned using Nix, which guarantees reproducibility
@@ -28,13 +55,13 @@ differences between Ubuntu and foobar:
 - for all practical purposes, foobar just describes the commands that should run
   in initrd and init (PID 1), everything else is a subsequent consequence
 
-differences between lfs (book) and foobar:
+Differences between lfs (book) and foobar:
 
 - foobar does not use systemd, the current lfs book uses systemd
 - minimal compiling, using Nix substituters
 - no PAM, no dbus, no unnecessary complexity
 
-differences between vanilla NixOS and foobar:
+Differences between vanilla NixOS and foobar:
 
 - no NixOS module system, foobar is extensible using
   fixed-point combinators
@@ -43,9 +70,9 @@ differences between vanilla NixOS and foobar:
   have semi-equivalent implementations for foobar
 - `/etc` is an EROFS image instead of a symlink farm
 
-it is recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
+It is *highly* recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
 
-before we proceed, we should fetch foobar so we can extend it:
+Before we proceed, we should fetch foobar so we can extend it:
 
 #+BEGIN_SRC nix :tangle foobar.nix
   let
@@ -59,18 +86,21 @@ before we proceed, we should fetch foobar so we can extend it:
   configuration
 #+END_SRC
 
-the above expression is tangled to ~foobar.nix~. this can be used for all subsequent extensions.
+The above expression is tangled to [[foobar.nix][~foobar.nix~]]. this can be used for all subsequent extensions.
 
-** installing
+** Installing
 
-*** building disk image
+This section covers installing and preparing the foobar system.
 
-foobar provides a ~diskImage~ output which, by default, creates a fat32 /boot with the foobar uki and bootloader, and a xfs rootfs
+*** Building disk image
 
-this is ideal for this problem, since we want to start with an unencrypted rootfs and work towards reencrypting it.
+foobar provides a ~diskImage~ output which, by default, creates a fat32 ~/boot~ with the foobar UKI and bootloader,
+and a xfs rootfs. This is ideal for this problem, since we want to start with an unencrypted rootfs and work
+towards reencrypting it.
 
-the first thing we need to do is to create a foobar "configuration", which exploits the fact that the upstream foobar
-configuration is extensible using fixed-point combinators. the configuration will look like this:
+The first thing we need to do is to create a foobar "configuration", which exploits the fact that the upstream foobar
+configuration is extensible using fixed-point combinators. Note that for the first install, we do not need to change
+anything about the default configuration. The configuration will look like this:
 
 #+BEGIN_SRC nix :tangle config-1-install.nix
   let
@@ -79,23 +109,27 @@ configuration is extensible using fixed-point combinators. the configuration wil
   configuration
 #+END_SRC
 
-note that for the first install, we do not need to change anything about the default configuration.
-
-the above expression is tangled to ~config-1-install.nix~
+The above expression is tangled to [[config-1-install.nix][~config-1-install.nix~]].
 
 #+BEGIN_SRC console
-  $ nix build -f https://github.com/sotormd/wc/archive/master.tar.gz config-1-install.build.diskImage
+  $ git clone https://github.com/sotormd/wc && cd wc
+  $ nix build -f config-1-install.nix build.diskImage
   $ cp result image.raw
 #+END_SRC
 
-this gives us a ~image.raw~ that we can work with.
+This gives us a ~image.raw~ that we can work with.
 
-*** first boot
+*** First boot
 
-this can be booted with qemu. since we want secureboot support we need ~OVMF_CODE.secboot.fd~ and ~OVMF_VARS.secboot.fd~, i used the ones from Fedora's koji builds.
-they are included in this repository under ~./assets/~.
+The generated image can be booted using QEMU. Since we want secureboot support we need ~OVMF_CODE.secboot.fd~
+and ~OVMF_VARS.secboot.fd~. I used the ones from Fedora's koji builds, they are included in this repository
+under [[assets][~./assets/~]].
 
-make sure to disable secure boot for the first boot (see next section). to disable secure boot, reboot into the firmware interface and uncheck ~Attempt Secure Boot~.
+Unlike Ubuntu, foobar does not (and cannot) use Microsoft's secureboot shim. This means that the only way to
+use secureboot is to enroll our own PK, KEK, and db certs. So, we have to disable secureboot for the first boot.
+To disable secure boot, reboot into the firmware interface and uncheck ~Attempt Secure Boot~.
+
+For first boot :-
 
 #+BEGIN_SRC console
   $ qemu-system-x86_64 \
@@ -113,59 +147,90 @@ make sure to disable secure boot for the first boot (see next section). to disab
     -nographic
 #+END_SRC
 
-*** secure boot
+*** Secure Boot
 
-unlike Ubuntu, foobar does not use the microsoft secure boot shim. this means that we need to sign the uki & bootloader for each generation ourselves.
-luckily, foobar already has decent secureboot support ootb.
+As mentioned earlier, unlike Ubuntu, foobar does not use the Microsoft secureboot shim. This means that we need
+to sign the UKI & bootloader for each generation ourselves. Luckily, as of last week, foobar already has decent
+secureboot support ootb.
 
-in order to enroll our own keys, we must boot in Setup Mode. with the qemu ovmf firmware, this can be done by deleting any existing Platform Key(s).
-reboot into the firmware interface and click ~Reset all Secure Boot keys~. next time we boot, we will be in Setup Mode.
+In order to enroll our own keys, we must boot in Setup Mode. With the QEMU OVMF firmware, this can be done by
+deleting any existing Platform Key(s). Reboot into the firmware interface and click ~Reset all Secure Boot keys~.
+Next time we boot, we will be in Setup Mode.
 
-once booted, we can use the new ~foobar-generate-secureboot-keys~ and ~foobar-enroll-secureboot-keys~, which use ~sbctl~ to create and enroll a PK, KEK and signing db key and cert.
-
-log in as root (password: root)
+Once booted, we can use the new ~foobar-generate-secureboot-keys~ and ~foobar-enroll-secureboot-keys~,
+which use ~sbctl~ to create and enroll a PK, KEK and signing db key and cert.
 
 #+BEGIN_SRC console
   # foobar-generate-secureboot-keys
   # foobar-enroll-secureboot-keys
 #+END_SRC
 
-at this stage, we have enrolled the keys but our uki & bootloader are unsigned. we will use ~foobar-rebuild~ to rebuild a new generation with ~secureBootEnabled~ set to true.
+At this stage, we have enrolled the keys but our UKI & bootloader are unsigned. We will use ~foobar-rebuild~ to
+rebuild a new generation with ~secureBootEnabled~ set to true.
 
 #+BEGIN_SRC nix :tangle config-2-secureboot.nix
   let
     configuration = import ./foobar.nix;
 
-    finalConfiguration = configuration.extend (_: _:
-      { secureBootEnabled = true; }
+    finalConfiguration = configuration.extend (
+      _: _: { secureBootEnabled = true; }
     );
   in
   finalConfiguration
 #+END_SRC
 
-the above expression is tangled to ~config-2-secureboot.nix~.
-
-now we can rebuild this, log in as root again
+The above expression is tangled to [[config-2-secureboot.nix][~config-2-secureboot.nix~]].
 
 #+BEGIN_SRC console
-  $ export FOOBAR_CONFIG="https://github.com/sotormd/wc/
-  foobar-rebuild switch
+  % git clone https://github.com/sotormd/wc
 #+END_SRC
-
-reboot and notice that the firmware prevents booting into generation 1. only generation 2 works since it uses a signed uki.
-
-** encrypt the root partition in place
-
-on Ubuntu, this would usually be done using a live ISO. since foobar uses the nixos-like concept of "generations" we simply need a generation where
-the real root is never mounted. this can be done by either a. mounting a real system as tmpfs or b. never leaving initrd.
-
-the `config-3-initrd-shell` provides one such configuration.
 
 #+BEGIN_SRC console
-  export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
-  foobar-rebuild switch
+  # export FOOBAR_CONFIG=/home/foo/wc/config-2-secureboot.nix
+  # foobar-rebuild boot
 #+END_SRC
 
-now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place.
+Reboot and notice that the firmware prevents booting into generation 1. Only generation 2 works since it uses a signed UKI.
 
+At this stage, for all practical purposes, we are on-par with a default Ubuntu installation.
 
+** Encrypt the root partition in place
+
+On Ubuntu, this would usually be done using a live ISO. Since foobar uses the NixOS-like concept of "generations" we simply need
+a generation where the real root is never mounted. This can be done by either:
+
+- mounting a real system as tmpfs or
+- never leaving initrd
+
+For this task, we will create a generation that never leaves initrd.
+
+#+BEGIN_SRC nix :tangle config-3-initrd-shell.nix
+  let
+    configuration = import ./foobar.nix;
+
+    finalConfiguration = configuration.extend (
+      final: prev: let
+        inherit (final) pkgs lib sh busyboxPATH;
+      in
+      {
+        secureBootEnabled = true;
+        initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
+        initrdPackages = prev.initrdPackages ++ [ pkgs.cryptsetup pkgs.bashInteractive ];
+        initrdCommands = ''
+          echo initrd: starting shell
+          bash
+        '';
+      }
+    );
+  in
+  finalConfiguration
+#+END_SRC
+
+The above expression is tangled to [[config-3-initrd-shell.nix][~config-3-initrd-shell.nix~]].
+
+#+BEGIN_SRC console
+  # export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
+  # foobar-rebuild switch
+#+END_SRC
+
+Now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place.
