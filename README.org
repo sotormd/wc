@@ -77,8 +77,8 @@ Before we proceed, we should fetch foobar so we can extend it:
 #+BEGIN_SRC nix :tangle foobar.nix
   let
     foo = fetchTarball {
-      url = "https://github.com/sotormd/foo/archive/1b144122eff5f9c8a727bf306147ff2258c749d0.tar.gz";
-      sha256 = "";
+      url = "https://github.com/sotormd/foo/archive/07e4db919298ff89b6ed40e0d5e529a60a94b821.tar.gz";
+      sha256 = "sha256-ISWx73izvHNyOv+A6oRf8Tc6S1AxrFAD4PZH0tTZvzg=";
     };
 
     configuration = import "${foo}/foobar/configuration.nix";
@@ -106,7 +106,7 @@ anything about the default configuration. The configuration will look like this:
   let
     configuration = import ./foobar.nix;
   in
-  configuration
+  configuration.foo
 #+END_SRC
 
 The above expression is tangled to [[config-1-install.nix][config-1-install.nix]].
@@ -115,6 +115,7 @@ The above expression is tangled to [[config-1-install.nix][config-1-install.nix]
   $ git clone https://github.com/sotormd/wc && cd wc
   $ nix build -f config-1-install.nix build.diskImage
   $ cp result image.raw
+  $ chmod +w image.raw
 #+END_SRC
 
 This gives us a ~image.raw~ that we can work with.
@@ -132,6 +133,7 @@ To disable secure boot, reboot into the firmware interface and uncheck ~Attempt 
 For first boot :-
 
 #+BEGIN_SRC console
+  $ cp assets/* .
   $ qemu-system-x86_64 \
     -machine q35,smm=on,accel=kvm \
     -m 16G \
@@ -176,7 +178,7 @@ rebuild a new generation with ~secureBootEnabled~ set to true.
       _: _: { secureBootEnabled = true; }
     );
   in
-  finalConfiguration
+  finalConfiguration.foo
 #+END_SRC
 
 The above expression is tangled to [[config-2-secureboot.nix][config-2-secureboot.nix]].
@@ -229,7 +231,7 @@ For this task, we will create a generation that never leaves initrd.
       }
     );
   in
-  finalConfiguration
+  finalConfiguration.foo
 #+END_SRC
 
 The above expression is tangled to [[config-3-initrd-shell.nix][config-3-initrd-shell.nix]].

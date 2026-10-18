@@ -22,4 +22,4 @@ let
     }
   );
 in
-finalConfiguration
+finalConfiguration.foo

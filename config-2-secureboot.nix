@@ -5,4 +5,4 @@ let
     _: _: { secureBootEnabled = true; }
   );
 in
-finalConfiguration
+finalConfiguration.foo
