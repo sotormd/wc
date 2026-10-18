@@ -1,13 +1,24 @@
 #+TITLE: webclub (systems & security)
 #+AUTHOR: sotormd
 #+EMAIL: sotormd@proton.me
+#+TOC: headlines 3
 
-* notice
+** introduction
+
+*** notation for command blocks
+
+command blocks starting with ~$~ are to be ran on the host
+
+command blocks starting with ~%~ are to be ran as user ~foo~ on the foobar vm
+
+command blocks starting with ~#~ are to be ran as user ~root~ on the foobar vm
+
+** operating system - foobar
 
 the original problem involved using Ubuntu, this solution uses [[https://github.com/sotormd/foo][foobar]], which is a minimal lfs-like system provisioned
 using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository.
 
-secureboot support was added to foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
+foobar is my own project. secureboot support was added to foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
 
 differences between Ubuntu and foobar:
 
@@ -17,40 +28,92 @@ differences between Ubuntu and foobar:
 - for all practical purposes, foobar just describes the commands that should run
   in initrd and init (PID 1), everything else is a subsequent consequence
 
-* installing
+differences between lfs (book) and foobar:
 
-** building disk image
+- foobar does not use systemd, the current lfs book uses systemd
+- minimal compiling, using Nix substituters
+- no PAM, no dbus, no unnecessary complexity
+
+differences between vanilla NixOS and foobar:
+
+- no NixOS module system, foobar is extensible using
+  fixed-point combinators
+- no layer of abstraction over simple shell scripts
+- many NixOS concepts (activation, generations, nixos-rebuild)
+  have semi-equivalent implementations for foobar
+- `/etc` is an EROFS image instead of a symlink farm
+
+it is recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
+
+before we proceed, we should fetch foobar so we can extend it:
+
+#+BEGIN_SRC nix :tangle foobar.nix
+  let
+    foo = fetchTarball {
+      url = "https://github.com/sotormd/foo/archive/1b144122eff5f9c8a727bf306147ff2258c749d0.tar.gz";
+      sha256 = "";
+    };
+
+    configuration = import "${foo}/foobar/configuration.nix";
+  in
+  configuration
+#+END_SRC
+
+the above expression is tangled to ~foobar.nix~. this can be used for all subsequent extensions.
+
+** installing
+
+*** building disk image
 
 foobar provides a ~diskImage~ output which, by default, creates a fat32 /boot with the foobar uki and bootloader, and a xfs rootfs
 
-#+BEGIN_SRC bash
-  nix build -f foobar build.diskImage
-  cp result image.raw
+this is ideal for this problem, since we want to start with an unencrypted rootfs and work towards reencrypting it.
+
+the first thing we need to do is to create a foobar "configuration", which exploits the fact that the upstream foobar
+configuration is extensible using fixed-point combinators. the configuration will look like this:
+
+#+BEGIN_SRC nix :tangle config-1-install.nix
+  let
+    configuration = import ./foobar.nix;
+  in
+  configuration
 #+END_SRC
 
-** first boot
+note that for the first install, we do not need to change anything about the default configuration.
+
+the above expression is tangled to ~config-1-install.nix~
+
+#+BEGIN_SRC console
+  $ nix build -f https://github.com/sotormd/wc/archive/master.tar.gz config-1-install.build.diskImage
+  $ cp result image.raw
+#+END_SRC
+
+this gives us a ~image.raw~ that we can work with.
+
+*** first boot
 
 this can be booted with qemu. since we want secureboot support we need ~OVMF_CODE.secboot.fd~ and ~OVMF_VARS.secboot.fd~, i used the ones from Fedora's koji builds.
+they are included in this repository under ~./assets/~.
 
 make sure to disable secure boot for the first boot (see next section). to disable secure boot, reboot into the firmware interface and uncheck ~Attempt Secure Boot~.
 
-#+BEGIN_SRC bash
-  qemu-system-x86_64 \
-  -machine q35,smm=on,accel=kvm \
-  -m 16G \
-  -smp 6 \
-  -global driver=cfi.pflash01,property=secure,value=on \
-  -drive if=pflash,format=raw,unit=0,file="OVMF_CODE.secboot.fd",readonly=on \
-  -drive if=pflash,format=raw,unit=1,file="OVMF_VARS.secboot.fd" \
-  -device ahci,id=ahci \
-  -drive id=disk,file="image.raw",format=raw,if=none \
-  -device ide-hd,drive=disk,bus=ahci.0 \
-  -netdev user,id=net0 \
-  -device virtio-net-pci,netdev=net0 \
-  -nographic
+#+BEGIN_SRC console
+  $ qemu-system-x86_64 \
+    -machine q35,smm=on,accel=kvm \
+    -m 16G \
+    -smp 6 \
+    -global driver=cfi.pflash01,property=secure,value=on \
+    -drive if=pflash,format=raw,unit=0,file="OVMF_CODE.secboot.fd",readonly=on \
+    -drive if=pflash,format=raw,unit=1,file="OVMF_VARS.secboot.fd" \
+    -device ahci,id=ahci \
+    -drive id=disk,file="image.raw",format=raw,if=none \
+    -device ide-hd,drive=disk,bus=ahci.0 \
+    -netdev user,id=net0 \
+    -device virtio-net-pci,netdev=net0 \
+    -nographic
 #+END_SRC
 
-** secure boot
+*** secure boot
 
 unlike Ubuntu, foobar does not use the microsoft secure boot shim. this means that we need to sign the uki & bootloader for each generation ourselves.
 luckily, foobar already has decent secureboot support ootb.
@@ -62,43 +125,47 @@ once booted, we can use the new ~foobar-generate-secureboot-keys~ and ~foobar-en
 
 log in as root (password: root)
 
-#+BEGIN_SRC bash
-  foobar-generate-secureboot-keys
-  foobar-enroll-secureboot-keys
+#+BEGIN_SRC console
+  # foobar-generate-secureboot-keys
+  # foobar-enroll-secureboot-keys
 #+END_SRC
 
 at this stage, we have enrolled the keys but our uki & bootloader are unsigned. we will use ~foobar-rebuild~ to rebuild a new generation with ~secureBootEnabled~ set to true.
 
-the `config-2-secureboot.nix` file provides one such configuration.
+#+BEGIN_SRC nix :tangle config-2-secureboot.nix
+  let
+    configuration = import ./foobar.nix;
 
-log in as foo (password: foo)
-
-#+BEGIN_SRC bash
-  git clone https://github.com/sotormd/wc
-  vi wc/config-2-secureboot.nix
+    finalConfiguration = configuration.extend (_: _:
+      { secureBootEnabled = true; }
+    );
+  in
+  finalConfiguration
 #+END_SRC
+
+the above expression is tangled to ~config-2-secureboot.nix~.
 
 now we can rebuild this, log in as root again
 
-#+BEGIN_SRC bash
-  export FOOBAR_CONFIG=/home/foo/wc/config-2-secureboot.nix
+#+BEGIN_SRC console
+  $ export FOOBAR_CONFIG="https://github.com/sotormd/wc/
   foobar-rebuild switch
 #+END_SRC
 
 reboot and notice that the firmware prevents booting into generation 1. only generation 2 works since it uses a signed uki.
 
-* encrypt the root partition in place
+** encrypt the root partition in place
 
 on Ubuntu, this would usually be done using a live ISO. since foobar uses the nixos-like concept of "generations" we simply need a generation where
 the real root is never mounted. this can be done by either a. mounting a real system as tmpfs or b. never leaving initrd.
 
 the `config-3-initrd-shell` provides one such configuration.
 
-#+BEGIN_SRC bash
+#+BEGIN_SRC console
   export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
   foobar-rebuild switch
 #+END_SRC
 
-now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place
+now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place.
 
 
