@@ -182,7 +182,7 @@ rebuild a new generation with ~secureBootEnabled~ set to true.
 The above expression is tangled to [[config-2-secureboot.nix][config-2-secureboot.nix]].
 
 #+BEGIN_SRC console
-  % git clone https://github.com/sotormd/wc
+  % git clone https://github.com/sotormd/wc ~/wc
 #+END_SRC
 
 #+BEGIN_SRC console
@@ -210,15 +210,21 @@ For this task, we will create a generation that never leaves initrd.
 
     finalConfiguration = configuration.extend (
       final: prev: let
-        inherit (final) pkgs lib sh busyboxPATH;
+        inherit (final) pkgs;
       in
       {
         secureBootEnabled = true;
         initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
         initrdPackages = prev.initrdPackages ++ [ pkgs.cryptsetup pkgs.bashInteractive ];
         initrdCommands = ''
-          echo initrd: starting shell
-          bash
+          mkdir -p /proc /sys /dev
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          mount -t devtmpfs devtmpfs /dev
+
+          ${final.loadModules final.initrdModules}
+
+          exec bash  # leaving will cause a kernel panic but thats alright :p
         '';
       }
     );
@@ -230,7 +236,7 @@ The above expression is tangled to [[config-3-initrd-shell.nix][config-3-initrd-
 
 #+BEGIN_SRC console
   # export FOOBAR_CONFIG=/home/foo/wc/config-3-initrd-shell.nix
-  # foobar-rebuild switch
+  # foobar-rebuild boot
 #+END_SRC
 
 Now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place.
