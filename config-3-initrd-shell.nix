@@ -26,7 +26,8 @@ let
 
         ${final.loadModules final.initrdModules}
 
-        exec bash  # leaving will cause a kernel panic but thats alright :p
+        exec bash # leaving will cause a kernel
+                  # panic but thats alright :p
       '';
     }
   );

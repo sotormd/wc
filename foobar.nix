@@ -1,7 +1,10 @@
 let
+  commit = "3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0";
+  hash = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
+
   foo = fetchTarball {
-    url = "https://github.com/sotormd/foo/archive/3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0.tar.gz";
-    sha256 = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
+    url = "https://github.com/sotormd/foo/archive/${commit}.tar.gz";
+    sha256 = hash;
   };
 
   configuration = import "${foo}/foobar/configuration.nix";
