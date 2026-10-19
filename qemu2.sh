@@ -1,3 +1,10 @@
+mkdir -p tpm
+
+swtpm socket -d --tpmstate dir="tpm" \
+     --ctrl type=unixio,path="tpm/swtpm-sock" \
+     --tpm2 \
+     --log level=20
+
 qemu-system-x86_64 \
      -machine q35,smm=on,accel=kvm \
      -m 16G \
