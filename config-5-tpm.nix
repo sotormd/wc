@@ -18,7 +18,7 @@ let
       initrdPackages = prev.initrdPackages ++ [
         final.pkgs.cryptsetup
         final.pkgs.clevis
-        final.pkgs.bash # for clevis' shebang
+        final.pkgs.runtimeShell # for clevis' shebang
       ];
 
       initrdFindRealRootCommands = ''

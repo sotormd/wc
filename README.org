@@ -503,7 +503,7 @@ The final configuration will have to attempt automatic unlocking in initrd.
         initrdPackages = prev.initrdPackages ++ [
           final.pkgs.cryptsetup
           final.pkgs.clevis
-          final.pkgs.bash # for clevis' shebang
+          final.pkgs.runtimeShell # for clevis' shebang
         ];
 
         initrdFindRealRootCommands = ''
