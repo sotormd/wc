@@ -18,6 +18,7 @@ let
         cp ${./config-2-secureboot.nix} $out/config-2-secureboot.nix
         cp ${./config-3-initrd-shell.nix} $out/config-3-initrd-shell.nix
         cp ${./config-4-luks.nix} $out/config-4-luks.nix
+        cp ${./config-5-tpm.nix} $out/config-5-tpm.nix
       '';
     in
     {
@@ -26,7 +27,7 @@ let
         ''
         echo activate: linking configs
 
-        ln -s ${configs} /run/configs
+        ln -sfn ${configs} /run/configs
         ''
       ];
     }

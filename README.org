@@ -4,23 +4,6 @@
 
 Submission for WebClub (Systems & Security) & IRIS.
 
-- [[#prior-work][Prior Work]]
-- [[#task][Task]]
-
-* Prior Work
-
-This section covers my prior work in related fields.
-
-*For the task submission, see [[#task][Task]].*
-
-** Homelab
-
-** Nix/NixOS
-
-** Projects
-
-** Other contributions
-
 * Task
 
 The chosen task is "Operating Systems".
@@ -31,6 +14,8 @@ The task involves the following goals:
 
 - Secure boot in user mode
 - Encrypt a disk in-place using ~cryptsetup reencrypt~
+- Fix the boot process to ask for luks passphrase
+- Set up a MOK
 - TPM 2.0 unlocking with relevant PCRs
 
 This document covers all 5 expected steps in the original task document.
@@ -76,6 +61,9 @@ Differences between vanilla NixOS and foobar:
 
 It is *highly* recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
 
+Since foobar eliminates all distribution-specific differences, implementing a solution like this
+requires very explicit steps along the way.
+
 Before we proceed, we should fetch foobar so we can extend it:
 
 #+BEGIN_SRC nix :tangle foobar.nix
@@ -99,6 +87,7 @@ Before we proceed, we should fetch foobar so we can extend it:
           cp ${./config-2-secureboot.nix} $out/config-2-secureboot.nix
           cp ${./config-3-initrd-shell.nix} $out/config-3-initrd-shell.nix
           cp ${./config-4-luks.nix} $out/config-4-luks.nix
+          cp ${./config-5-tpm.nix} $out/config-5-tpm.nix
         '';
       in
       {
@@ -107,7 +96,7 @@ Before we proceed, we should fetch foobar so we can extend it:
           ''
           echo activate: linking configs
 
-          ln -s ${configs} /run/configs
+          ln -sfn ${configs} /run/configs
           ''
         ];
       }
@@ -333,7 +322,7 @@ Then, the persistent disk:
 
 #+BEGIN_SRC console
   # mkdir -p /root/persist
-  # mount -t xfs /dev/mapper/root /root/persist
+  # mount -t xfs /dev/mapper/drive /root/persist
 #+END_SRC
 
 Then, the boot partition:
@@ -426,4 +415,120 @@ as expected.
 We don't need to do this, we can already sign any arbitrary artifact. In fact, our UKI and bootloader
 is currently self-signed using ~sbsigntool~ as part of ~foobar-rebuild~.
 
+Setting up MOK makes sense if you use Microsoft's shim. We don't do that here, this is largely a non-issue.
+
 ** Step 5: Set up automatic unlocking with TPM 2.0
+
+We need to pass a swtpm device to QEMU, the new QEMU command becomes:
+
+#+BEGIN_SRC console
+  $ mkdir tpm
+  $ swtpm socket -d --tpmstate dir="tpm" \
+     --ctrl type=unixio,path="tpm/swtpm-sock" \
+     --tpm2 \
+     --log level=20
+#+END_SRC
+
+#+BEGIN_SRC console
+  $ qemu-system-x86_64 \
+     -machine q35,smm=on,accel=kvm \
+     -m 16G \
+     -smp 6 \
+     -global driver=cfi.pflash01,property=secure,value=on \
+     -drive if=pflash,format=raw,unit=0,file="OVMF_CODE.secboot.fd",readonly=on \
+     -drive if=pflash,format=raw,unit=1,file="OVMF_VARS.secboot.fd" \
+     -device ahci,id=ahci \
+     -drive id=disk,file="image.raw",format=raw,if=none \
+     -device ide-hd,drive=disk,bus=ahci.0 \
+     -netdev user,id=net0 \
+     -device virtio-net-pci,netdev=net0 \
+     -nographic \
+     -chardev socket,id=chrtpm,path="tpm/swtpm-sock" \
+     -tpmdev emulator,id=tpm0,chardev=chrtpm \
+     -device tpm-tis,tpmdev=tpm0
+#+END_SRC
+
+Boot into generation 4 (it asks for luks password) and you should be able to see a ~/dev/tpm0~.
+
+#+BEGIN_SRC console
+  # ls /dev/tpm0
+  # nix shell github:nixos/nixpkgs#tpm2-tools
+  # export TPM2TOOLS_TCTI="device:/dev/tpm0"
+  # tpm2_getcap properties-fixed
+  TPM2_PT_FAMILY_INDICATOR:
+    raw: 0x322E3000
+    value: "2.0"
+  ...
+  # tpm2_pcrread sha256:7
+  sha256:
+    7 : 0xFCF71D46154B9CFB59F2B306370D6C42E442475644503E16D22FC5E301A6B87B
+  # exit
+#+END_SRC
+
+Now that we have TPM 2.0 working, we can use ~clevis~ to enroll the luks key in the TPM device.
+
+#+BEGIN_SRC console
+  # nix shell github:nixos/nixpkgs#clevis
+  # clevis luks bind -d /dev/sda2 tpm2 '{"pcr_ids":"7"}'
+  Enter existing LUKS password: 
+  # clevis luks list -d /dev/sda2
+  1: tpm2 '{"hash":"sha256","key":"ecc","pcr_bank":"sha1","pcr_ids":"7"}'
+  # exit 
+#+END_SRC
+
+PCR 7 is secureboot state, so the TPM releases the key only if the secureboot state is as expected.
+For example, disabling secureboot will result in the TPM not releasing the key.
+
+The final configuration will have to attempt automatic unlocking in initrd.
+
+#+BEGIN_SRC nix :tangle config-5-tpm.nix
+  let
+    configuration = import ./foobar.nix;
+
+    finalConfiguration = configuration.extend (
+      final: prev:
+      {
+        secureBootEnabled = true;
+
+        initrdModules = prev.initrdModules ++ [
+          "dm_mod"
+          "cbc"
+          "xts"
+          "encrypted_keys"
+          "trusted"
+          "dm_crypt"
+        ];
+
+        initrdPackages = prev.initrdPackages ++ [
+          final.pkgs.cryptsetup
+          final.pkgs.clevis
+        ];
+
+        initrdFindRealRootCommands = ''
+          boot=/dev/sda1
+          cryptroot=/dev/sda2
+          root=/dev/mapper/drive
+
+          if ! clevis luks unlock -d "$cryptroot" -n drive; then
+            cryptsetup luksOpen "$cryptroot" drive
+          fi
+        '';
+      }
+    );
+  in
+  finalConfiguration.foo
+#+END_SRC
+
+The above expression is tangled to [[config-5-tpm.nix][config-5-tpm.nix]].
+
+#+BEGIN_SRC console
+  # export FOOBAR_CONFIG=/run/configs/config-5-tpm.nix
+  # foobar-rebuild boot
+#+END_SRC
+
+Reboot into generation 5 and the disk should be automatically unlocked.
+
+Reboot into firmware and disable secureboot, then reboot into generation 5. The disk will
+not be automatically unlocked.
+
+** Conclusion
