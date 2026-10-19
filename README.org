@@ -500,6 +500,11 @@ The final configuration will have to attempt automatic unlocking in initrd.
           "dm_crypt"
         ];
 
+        # packages and lib for clevis is based on
+        # non-systemd initrd configuration from
+        # https://github.com/nixos/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/clevis.nix
+        # because it is super convoluting and requires so many seemingly-unrelated things ;-;
+
         initrdPackages = prev.initrdPackages ++ [
           final.pkgs.cryptsetup
           final.pkgs.clevis
@@ -509,10 +514,14 @@ The final configuration will have to attempt automatic unlocking in initrd.
 
           # used by clevis
           final.pkgs.tpm2-tools
+          final.pkgs.tpm2-tss
+          final.pkgs.jose
+          (final.lib.hiPrio final.pkgs.coreutils) # hiPrio because more imp than busybox
+          (final.lib.hiPrio final.pkgs.gnugrep)
+          (final.lib.hiPrio final.pkgs.gnused)
         ];
 
-        # based on
-        # https://github.com/nixos/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/clevis.nix
+        # required for tpm2_pcrread and stuff
         initrdContents = prev.initrdContents ++ [
           {
             source = "${pkgs.tpm-tss}/lib/libtss2-tcti-device.so.0";
@@ -527,7 +536,6 @@ The final configuration will have to attempt automatic unlocking in initrd.
 
           if ! clevis luks unlock -d "$cryptroot" -n drive; then
             cryptsetup luksOpen "$cryptroot" drive
-            bash # for debugging
           fi
         '';
       }
@@ -537,6 +545,9 @@ The final configuration will have to attempt automatic unlocking in initrd.
 #+END_SRC
 
 The above expression is tangled to [[config-5-tpm.nix][config-5-tpm.nix]].
+
+It took quite some time to discover everything required for clevis to work in initrd. This file has gone through
+at least forty iterations.
 
 #+BEGIN_SRC console
   # export FOOBAR_CONFIG=/run/configs/config-5-tpm.nix
@@ -550,9 +561,9 @@ not be automatically unlocked.
 
 ** Conclusion
 
-If you notice carefully, every manual step in this process (eg, calling ~cryptsetup reencrypt~ or calling ~clevis~)
-could have been ran as part of a foobar generation, and this entire task could have been done in a non-interactive
-way. However, I think the current solution is balanced and upholds the spirit of the task.
+Every manual step in this process (eg, calling ~cryptsetup reencrypt~ or calling ~clevis~) could have been ran as
+part of a foobar generation, and this entire task could have been done in a non-interactive way. However, I think
+the current solution is balanced and upholds the spirit of the task.
 
 Using foobar for this task has been a net-positive for me, since foobar was merely a recreational project that I
 haven't been using for anything serious, apart from a couple I2PD routers here and there. This task has directly
@@ -591,7 +602,7 @@ As required by the task, here is the writeup:
 
      /dev/mapper/drive -> /dev/sda2
 
-     /dev/mapper/drive xfs
+     /dev/mapper/drive xfs FOOBAR-ROOT
 
      /boot    -> /dev/sda1
      /        -> tmpfs
@@ -604,5 +615,8 @@ As required by the task, here is the writeup:
 UUIDS:
 
 #+BEGIN_SRC
+  /dev/dm-0: LABEL="FOOBAR-ROOT" UUID="d12b1f2e-ab4b-47d4-bb1c-6127fe3e4446" TYPE="xfs"
+  /dev/sda2: UUID="7a707f4c-cbdf-11f1-a8d5-31a35540d79a" TYPE="crypto_LUKS"
+  /dev/sda1: LABEL="FOOBAR-ESP" UUID="4C4B-71A7" TYPE="vfat"
 #+END_SRC
 

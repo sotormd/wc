@@ -15,6 +15,11 @@ let
         "dm_crypt"
       ];
 
+      # packages and lib for clevis is based on
+      # non-systemd initrd configuration from
+      # https://github.com/nixos/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/clevis.nix
+      # because it is super convoluting and requires so many seemingly-unrelated things ;-;
+
       initrdPackages = prev.initrdPackages ++ [
         final.pkgs.cryptsetup
         final.pkgs.clevis
@@ -24,10 +29,14 @@ let
 
         # used by clevis
         final.pkgs.tpm2-tools
+        final.pkgs.tpm2-tss
+        final.pkgs.jose
+        (final.lib.hiPrio final.pkgs.coreutils) # hiPrio because more imp than busybox
+        (final.lib.hiPrio final.pkgs.gnugrep)
+        (final.lib.hiPrio final.pkgs.gnused)
       ];
 
-      # based on
-      # https://github.com/nixos/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/clevis.nix
+      # required for tpm2_pcrread and stuff
       initrdContents = prev.initrdContents ++ [
         {
           source = "${pkgs.tpm-tss}/lib/libtss2-tcti-device.so.0";
@@ -42,7 +51,6 @@ let
 
         if ! clevis luks unlock -d "$cryptroot" -n drive; then
           cryptsetup luksOpen "$cryptroot" drive
-          bash # for debugging
         fi
       '';
     }
