@@ -39,7 +39,7 @@ let
       # required for tpm2_pcrread and stuff
       initrdContents = prev.initrdContents ++ [
         {
-          source = "${pkgs.tpm-tss}/lib/libtss2-tcti-device.so.0";
+          source = "${final.pkgs.tpm2-tss}/lib/libtss2-tcti-device.so.0";
           target = "/lib/libtss2-tcti-device.so.0";
         }
       ];
