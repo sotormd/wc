@@ -67,8 +67,8 @@ Before we proceed, we should fetch foobar so we can extend it:
 
 #+BEGIN_SRC nix :tangle foobar.nix
   let
-    commit = "ec338bdd9b7939819318b6f290c7ae3af12dcc5f";
-    hash = "sha256-iG++FbLDVol7H2uv8+HgGWYCVJdZqiZun8sB3HteWF4=";
+    commit = "4c0f66dae627ab6ca48278141ec0c9893b526814";
+    hash = "sha256-KiRy+yLyhPIN9yJXWsa/vhKHAFmt4hgner2PBnECFkA=";
 
     foo = fetchTarball {
       url = "https://github.com/sotormd/foo/archive/${commit}.tar.gz";
@@ -503,7 +503,21 @@ The final configuration will have to attempt automatic unlocking in initrd.
         initrdPackages = prev.initrdPackages ++ [
           final.pkgs.cryptsetup
           final.pkgs.clevis
-          final.pkgs.runtimeShell # for clevis' shebang
+
+          # for clevis' shebang
+          (builtins.dirOf (builtins.dirOf final.pkgs.runtimeShell))
+
+          # used by clevis
+          final.pkgs.tpm2-tools
+        ];
+
+        # based on
+        # https://github.com/nixos/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/clevis.nix
+        initrdContents = prev.initrdContents ++ [
+          {
+            source = "${pkgs.tpm-tss}/lib/libtss2-tcti-device.so.0";
+            target = "/lib/libtss2-tcti-device.so.0";
+          }
         ];
 
         initrdFindRealRootCommands = ''
@@ -513,6 +527,7 @@ The final configuration will have to attempt automatic unlocking in initrd.
 
           if ! clevis luks unlock -d "$cryptroot" -n drive; then
             cryptsetup luksOpen "$cryptroot" drive
+            bash # for debugging
           fi
         '';
       }
