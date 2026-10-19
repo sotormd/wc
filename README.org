@@ -114,7 +114,7 @@ The above expression is tangled to [[foobar.nix][foobar.nix]]. this can be used 
 Note that we also add a activation hook that links all configs to ~/run/configs~ so that we can
 switch to future generations without cloning this repository.
 
-** Installing
+** Step 1: Installing
 
 This section covers installing and preparing the foobar system.
 
@@ -218,7 +218,7 @@ Reboot and notice that the firmware prevents booting into generation 1. Only gen
 
 At this stage, for all practical purposes, we are on-par with a default Ubuntu installation.
 
-** Encrypt the root partition in place
+** Step 2: Encrypt the root partition in place
 
 On Ubuntu, this would usually be done using a live ISO. Since foobar uses the NixOS-like concept of "generations" we simply need
 a generation where the real root is never mounted. This can be done by either:
@@ -362,6 +362,8 @@ The tree under ~/root~ is not identical to what the foobar initrd constructs, we
   # exec switch_root /root "$BOOTED_CLOSURE/init"
 #+END_SRC
 
+** Step 3: Fix the boot process
+
 After init, we should arrive at the login prompt as usual. Log in as root and switch to a generation that will
 unlock the luks device automatically.
 
@@ -393,3 +395,10 @@ The above expression is tangled to [[config-4-luks.nix][config-4-luks.nix]].
 
 Booting into generation 4 should prompt for a password during initrd and arrive at a usable system
 as expected.
+
+** Step 4: Set up MOK
+
+We don't need to do this, we can already sign any arbitrary artifact. In fact, our UKI and bootloader
+is currently self-signed using ~sbsigntool~ as part of ~foobar-rebuild~.
+
+** Step 5: Set up automatic unlocking with TPM 2.0
