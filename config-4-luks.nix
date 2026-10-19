@@ -13,7 +13,9 @@ let
         "dm_crypt"
        ];
 
-      initrdPackages = prev.initrdPackages ++ [ final.pkgs.cryptsetup ];
+      initrdPackages = prev.initrdPackages ++ [
+        final.pkgs.cryptsetup
+      ];
 
       initrdFindRealRootCommands = ''
         boot=/dev/sda1
