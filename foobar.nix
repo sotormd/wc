@@ -1,6 +1,6 @@
 let
-  commit = "3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0";
-  hash = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
+  commit = "ec338bdd9b7939819318b6f290c7ae3af12dcc5f";
+  hash = "sha256-iG++FbLDVol7H2uv8+HgGWYCVJdZqiZun8sB3HteWF4=";
 
   foo = fetchTarball {
     url = "https://github.com/sotormd/foo/archive/${commit}.tar.gz";

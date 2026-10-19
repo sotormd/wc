@@ -36,6 +36,9 @@ The original problem involved using Ubuntu. This solution uses my own project, [
 system provisioned using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository. Secureboot support was added to
 foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
 
+Since foobar eliminates all distribution-specific differences, implementing a solution like this
+requires very explicit steps along the way.
+
 Differences between Ubuntu and foobar:
 
 - foobar does not use systemd, it does not use a service manager at all
@@ -46,9 +49,8 @@ Differences between Ubuntu and foobar:
 
 Differences between LFS (book) and foobar:
 
-- foobar does not use systemd, the current lfs book uses systemd
 - minimal compiling, using Nix substituters
-- no PAM, no dbus, no unnecessary complexity
+- no PAM, no dbus, no systemd/sysvinit, no unnecessary complexity
 
 Differences between vanilla NixOS and foobar:
 
@@ -61,15 +63,12 @@ Differences between vanilla NixOS and foobar:
 
 It is *highly* recommended to read the [[https://github.com/sotormd/foo/blob/master/README.md][foo & foobar README]] before reading the rest of this submission.
 
-Since foobar eliminates all distribution-specific differences, implementing a solution like this
-requires very explicit steps along the way.
-
 Before we proceed, we should fetch foobar so we can extend it:
 
 #+BEGIN_SRC nix :tangle foobar.nix
   let
-    commit = "3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0";
-    hash = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
+    commit = "ec338bdd9b7939819318b6f290c7ae3af12dcc5f";
+    hash = "sha256-iG++FbLDVol7H2uv8+HgGWYCVJdZqiZun8sB3HteWF4=";
 
     foo = fetchTarball {
       url = "https://github.com/sotormd/foo/archive/${commit}.tar.gz";
@@ -402,6 +401,8 @@ unlock the luks device automatically.
 
 The above expression is tangled to [[config-4-luks.nix][config-4-luks.nix]].
 
+Note that on a real system, we should use PARTUUIDs instead of identifiers like sda1, sda2.
+
 #+BEGIN_SRC console
   # export FOOBAR_CONFIG=/run/configs/config-4-luks.nix
   # foobar-rebuild boot
@@ -532,3 +533,60 @@ Reboot into firmware and disable secureboot, then reboot into generation 5. The 
 not be automatically unlocked.
 
 ** Conclusion
+
+If you notice carefully, every manual step in this process (eg, calling ~cryptsetup reencrypt~ or calling ~clevis~)
+could have been ran as part of a foobar generation, and this entire task could have been done in a non-interactive
+way. However, I think the current solution is balanced and upholds the spirit of the task.
+
+Using foobar for this task has been a net-positive for me, since foobar was merely a recreational project that I
+haven't been using for anything serious, apart from a couple I2PD routers here and there. This task has directly
+contributed to:
+
+- [[https://github.com/sotormd/foo/pull/1][adding secureboot support to foobar]]
+- [[https://github.com/sotormd/foo/issues/2][fixing a curious bug with how ~foobar-rebuild~ delegates generations]]
+- [[https://github.com/sotormd/foo/pull/3][adding a proper "generation" build output to foobar]]
+- [[https://github.com/sotormd/foo/commit/ec338bdd9b7939819318b6f290c7ae3af12dcc5f][adding some ~/dev~ paths that are commonly available on other distros]]
+- [[https://github.com/sotormd/foo/commit/3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0][fixing a silly bug in foobar's initrd]]
+- [[https://github.com/sotormd/foo/commit/f8042cac04021a1a46c2ded1e99b769244f14233][adding ci actions for foo/foobar pushes]]
+
+and probably a lot more.
+
+As required by the task, here is the writeup:
+
+1. Before (default foobar layout)
+
+   #+BEGIN_SRC
+     /dev/sda1 vfat ESP FOOBAR-ESP
+     /dev/sda2 xfs      FOOBAR-ROOT
+
+     /boot    -> /dev/sda1
+     /        -> tmpfs
+     /persist -> /dev/sda2
+     /nix     -> /persist/nix
+     /home    -> /persist/home
+     /var     -> /persist/var
+   #+END_SRC
+
+2. After
+
+   #+BEGIN_SRC
+     /dev/sda1 vfat  ESP FOOBAR-ESP
+     /dev/sda2 luks2
+
+     /dev/mapper/drive -> /dev/sda2
+
+     /dev/mapper/drive xfs
+
+     /boot    -> /dev/sda1
+     /        -> tmpfs
+     /persist -> /dev/mapper/drive
+     /nix     -> /persist/nix
+     /home    -> /persist/home
+     /var     -> /persist/var
+   #+END_SRC
+
+UUIDS:
+
+#+BEGIN_SRC
+#+END_SRC
+
