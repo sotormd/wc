@@ -43,7 +43,7 @@ Command blocks starting with ~#~ are to be ran as user ~root~ on the foobar vm.
 
 ** Operating System - foobar
 
-The original problem involved using Ubuntu. This solution uses my own project, [[https://github.com/sotormd/foo][foobar]], which is a minimal lfs-like
+The original problem involved using Ubuntu. This solution uses my own project, [[https://github.com/sotormd/foo][foobar]], which is a minimal LFS-like
 system provisioned using the [[https://github.com/nixos/nix][Nix]] package manager and the [[https://github.com/nixos/nixpkgs][Nixpkgs]] package repository. Secureboot support was added to
 foobar in [[https://github.com/sotormd/foo/pull/1][foo#1]] specifically for this challenge.
 
@@ -55,7 +55,7 @@ Differences between Ubuntu and foobar:
 - for all practical purposes, foobar just describes the commands that should run
   in initrd and init (PID 1), everything else is a subsequent consequence
 
-Differences between lfs (book) and foobar:
+Differences between LFS (book) and foobar:
 
 - foobar does not use systemd, the current lfs book uses systemd
 - minimal compiling, using Nix substituters
@@ -84,17 +84,25 @@ Before we proceed, we should fetch foobar so we can extend it:
     configuration = import "${foo}/foobar/configuration.nix";
     
     finalConfiguration = configuration.extend (
-      final: prev:
+      final: prev: let
+        configs = final.pkgs.runCommand "configs" { } ''
+          mkdir -p $out
+          cp ${./foobar.nix} $out/foobar.nix
+          cp ${./config-1-install.nix} $out/config-1-install.nix
+          cp ${./config-2-secureboot.nix} $out/config-2-secureboot.nix
+          cp ${./config-3-initrd-shell.nix} $out/config-3-initrd-shell.nix
+          cp ${./config-4-luks.nix} $out/config-4-luks.nix
+        '';
+      in
       {
         activateCommands = builtins.concatStringsSep "\n" [
           prev.activateCommands
           ''
           echo activate: linking configs
 
-          ln -s ${./.} /run/configs
+          ln -s ${configs} /run/configs
           ''
         ];
-        diskImageSize = "20G";
       }
     );
   in
@@ -106,8 +114,6 @@ The above expression is tangled to [[foobar.nix][foobar.nix]]. this can be used 
 Note that we also add a activation hook that links all configs to ~/run/configs~ so that we can
 switch to future generations without cloning this repository.
 
-We also increase the disk image size from 5G to 20G.
-
 ** Installing
 
 This section covers installing and preparing the foobar system.
@@ -116,7 +122,7 @@ This section covers installing and preparing the foobar system.
 
 foobar provides a ~diskImage~ output which, by default, creates a fat32 ~/boot~ with the foobar UKI and bootloader,
 and a xfs rootfs. This is ideal for this problem, since we want to start with an unencrypted rootfs and work
-towards reencrypting it.
+towards reencrypting it (foreshadowing: it is not ideal).
 
 The first thing we need to do is to create a foobar "configuration", which exploits the fact that the upstream foobar
 configuration is extensible using fixed-point combinators. Note that for the first install, we do not need to change
@@ -230,9 +236,24 @@ For this task, we will create a generation that never leaves initrd.
       final: prev:
       {
         secureBootEnabled = true;
-        initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
-        initrdPackages = [ final.pkgs.busybox final.pkgs.cryptsetup final.pkgs.bashInteractive ];
+
+        initrdModules = prev.initrdModules ++ [
+          "cbc"
+          "xts"
+          "encrypted_keys"
+          "trusted"
+          "dm_crypt"
+          "dm_mod"
+        ];
+
+        initrdPackages = prev.initrdPackages ++ [
+          final.pkgs.cryptsetup
+          final.pkgs.bashInteractive
+        ];
+
         initrdCommands = ''
+          export PATH=/bin
+
           mkdir -p /proc /sys /dev
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
@@ -250,9 +271,130 @@ For this task, we will create a generation that never leaves initrd.
 
 The above expression is tangled to [[config-3-initrd-shell.nix][config-3-initrd-shell.nix]].
 
+The exact order of the modules are also important, loading them in any other order will lead to unknown symbol
+errors and the ~cryptsetup luksOpen~ will fail.
+
 #+BEGIN_SRC console
   # export FOOBAR_CONFIG=/run/configs/config-3-initrd-shell.nix
   # foobar-rebuild boot
 #+END_SRC
 
 Now, booting into generation 3 will drop into a bash shell with all the required tools to encrypt the disk in-place.
+
+Once booted into the initrd shell, we can cryptsetup reencrypt the disk. BUT there is a catch, something I had completely
+ignored while building the default ~diskImage~: XFS filesystems cannot be shrunk, at all. This matters because when we
+~cryptsetup reencrypt~ a block device, we require space for a luks header. The two choices we have now are:
+
+- scrap everything and use ext4 or
+- since this is a virtual disk, use ~qemu-img~ to increase the size
+
+We will increase the disk and partition size from the host without increasing the XFS filesystem size. On a real disk,
+the solution is to provision the XFS filesystem while leaving some space.
+
+#+BEGIN_SRC console
+  $ qemu-img resize image.raw +128M
+  $ sgdisk -e image.raw
+  $ parted -s image.raw "resizepart 2 100%"
+#+END_SRC
+
+Now we can boot into generation 3, which drops us into an initrd shell.
+
+#+BEGIN_SRC console
+  # cryptsetup reencrypt --encrypt --reduce-device-size 32M /dev/sda2
+  # cryptsetup isLuks /dev/sda2
+  # echo $?  # -> returns 0 because it is a luks device
+  # cryptsetup luksOpen /dev/sda2 drive
+  # mkdir -p /mnt
+  # mount /dev/mapper/drive /mnt
+  # ls /mnt
+  nix home var
+  # umount /mnt
+#+END_SRC
+
+At this stage we have encrypted an XFS disk in-place using ~cryptsetup reencrypt~. Now we can boot into the system from
+the initrd itself, and later create a generation 4 that does it automatically as part of the boot process.
+
+For now, we need to mount and ~switch_root~ manually. Mount the partitions as foobar usually does.
+
+First, a tmpfs root:
+
+#+BEGIN_SRC console
+  # mkdir -p /root
+  # mount -t tmpfs tmpfs /root
+#+END_SRC
+
+Then, the persistent disk:
+
+#+BEGIN_SRC console
+  # mkdir -p /root/persist
+  # mount -t xfs /dev/mapper/root /root/persist
+#+END_SRC
+
+Then, the boot partition:
+
+#+BEGIN_SRC console
+  # mkdir -p /root/boot
+  # mount -t vfat /dev/sda1 /root/boot
+#+END_SRC
+
+Then, the Nix store:
+
+#+BEGIN_SRC console
+  # mkdir -p /root/nix
+  # mount -o bind /root/persist/nix /root/nix
+  # mount -o bind /root/nix/store /root/nix/store
+  # mount -o remount,ro,bind,nosuid,nodev /root/nix/store
+#+END_SRC
+
+Then, the user homes:
+
+#+BEGIN_SRC console
+  # mkdir -p /root/home
+  # mount -o bind,nosuid,nodev /root/persist/home /root/home
+#+END_SRC
+
+Similarly, var:
+
+#+BEGIN_SRC console
+  # mkdir -p /root/var
+  # mount -o bind,nosuid,nodev /root/persist/var /root/var
+#+END_SRC
+
+The tree under ~/root~ is not identical to what the foobar initrd constructs, we can ~switch_root~ safely.
+
+#+BEGIN_SRC console
+  # exec switch_root /root "$BOOTED_CLOSURE/init"
+#+END_SRC
+
+After init, we should arrive at the login prompt as usual. Log in as root and switch to a generation that will
+unlock the luks device automatically.
+
+#+BEGIN_SRC nix :tangle config-4-luks.nix
+  let
+    configuration = import ./foobar.nix;
+
+    finalConfiguration = configuration.extend (
+      final: prev:
+      {
+        secureBootEnabled = true;
+        initrdFindRealRootCommands = ''
+          boot=/dev/sda1
+          cryptroot=/dev/sda2
+          root=/dev/mapper/drive
+          cryptsetup luksOpen "$cryptroot" drive
+        ''
+      }
+    );
+  in
+  finalConfiguration.foo
+#+END_SRC
+
+The above expression is tangled to [[config-4-luks.nix][config-4-luks.nix]].
+
+#+BEGIN_SRC console
+  # export FOOBAR_CONFIG=/run/configs/config-4-luks.nix
+  # foobar-rebuild boot
+#+END_SRC
+
+Booting into generation 4 should prompt for a password during initrd and arrive at a usable system
+as expected.

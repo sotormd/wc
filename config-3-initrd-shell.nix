@@ -5,9 +5,24 @@ let
     final: prev:
     {
       secureBootEnabled = true;
-      initrdModules = prev.initrdModules ++ [ "dm_crypt" "dm_mod" ];
-      initrdPackages = [ final.pkgs.busybox final.pkgs.cryptsetup final.pkgs.bashInteractive ];
+
+      initrdModules = prev.initrdModules ++ [
+        "cbc"
+        "xts"
+        "encrypted_keys"
+        "trusted"
+        "dm_crypt"
+        "dm_mod"
+      ];
+
+      initrdPackages = prev.initrdPackages ++ [
+        final.pkgs.cryptsetup
+        final.pkgs.bashInteractive
+      ];
+
       initrdCommands = ''
+        export PATH=/bin
+
         mkdir -p /proc /sys /dev
         mount -t proc proc /proc
         mount -t sysfs sysfs /sys
