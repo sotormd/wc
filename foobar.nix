@@ -1,7 +1,7 @@
 let
   foo = fetchTarball {
-    url = "https://github.com/sotormd/foo/archive/1cab6067ae4578d81f1720e70f4f6ef5a323db1e.tar.gz";
-    sha256 = "sha256-QAs/QhJBldfvq8+JHd9UG6jheZ4QE37uXocowKrMZPs=";
+    url = "https://github.com/sotormd/foo/archive/3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0.tar.gz";
+    sha256 = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
   };
 
   configuration = import "${foo}/foobar/configuration.nix";

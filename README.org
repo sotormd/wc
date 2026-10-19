@@ -77,8 +77,8 @@ Before we proceed, we should fetch foobar so we can extend it:
 #+BEGIN_SRC nix :tangle foobar.nix
   let
     foo = fetchTarball {
-      url = "https://github.com/sotormd/foo/archive/1cab6067ae4578d81f1720e70f4f6ef5a323db1e.tar.gz";
-      sha256 = "sha256-QAs/QhJBldfvq8+JHd9UG6jheZ4QE37uXocowKrMZPs=";
+      url = "https://github.com/sotormd/foo/archive/3bffd3dad8d81680fbcb60d1ab36c8e85e9ea8c0.tar.gz";
+      sha256 = "sha256-htzRmxCdj98wE5JpP+1tGcXdPf4l/OFPumDCyGKv0es=";
     };
 
     configuration = import "${foo}/foobar/configuration.nix";
@@ -230,13 +230,11 @@ For this task, we will create a generation that never leaves initrd.
 
 #+BEGIN_SRC nix :tangle config-3-initrd-shell.nix
   let
-    configuration = import ./foobar.nix;
+    configuration = import ./config-2-secureboot.nix;
 
     finalConfiguration = configuration.extend (
       final: prev:
       {
-        secureBootEnabled = true;
-
         initrdModules = prev.initrdModules ++ [
           "cbc"
           "xts"
@@ -252,8 +250,6 @@ For this task, we will create a generation that never leaves initrd.
         ];
 
         initrdCommands = ''
-          export PATH=/bin
-
           mkdir -p /proc /sys /dev
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
@@ -305,7 +301,7 @@ Now we can boot into generation 3, which drops us into an initrd shell.
   # echo $?  # -> returns 0 because it is a luks device
   # cryptsetup luksOpen /dev/sda2 drive
   # mkdir -p /mnt
-  # mount /dev/mapper/drive /mnt
+  # mount -t xfs /dev/mapper/drive /mnt
   # ls /mnt
   nix home var
   # umount /mnt
@@ -371,18 +367,17 @@ unlock the luks device automatically.
 
 #+BEGIN_SRC nix :tangle config-4-luks.nix
   let
-    configuration = import ./foobar.nix;
+    configuration = import ./config-2-secureboot.nix;
 
     finalConfiguration = configuration.extend (
       final: prev:
       {
-        secureBootEnabled = true;
         initrdFindRealRootCommands = ''
           boot=/dev/sda1
           cryptroot=/dev/sda2
           root=/dev/mapper/drive
           cryptsetup luksOpen "$cryptroot" drive
-        ''
+        '';
       }
     );
   in

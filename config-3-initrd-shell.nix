@@ -1,11 +1,9 @@
 let
-  configuration = import ./foobar.nix;
+  configuration = import ./config-2-secureboot.nix;
 
   finalConfiguration = configuration.extend (
     final: prev:
     {
-      secureBootEnabled = true;
-
       initrdModules = prev.initrdModules ++ [
         "cbc"
         "xts"
@@ -21,8 +19,6 @@ let
       ];
 
       initrdCommands = ''
-        export PATH=/bin
-
         mkdir -p /proc /sys /dev
         mount -t proc proc /proc
         mount -t sysfs sysfs /sys
