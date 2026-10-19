@@ -1,9 +1,11 @@
 let
-  configuration = import ./config-2-secureboot.nix;
+  configuration = import ./foobar.nix;
 
   finalConfiguration = configuration.extend (
     final: prev:
     {
+      secureBootEnabled = true;
+      
       initrdModules = prev.initrdModules ++ [
         "dm_mod"
         "cbc"
