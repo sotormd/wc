@@ -5,12 +5,12 @@ let
     final: prev:
     {
       initrdModules = prev.initrdModules ++ [
+        "dm_mod"
         "cbc"
         "xts"
         "encrypted_keys"
         "trusted"
         "dm_crypt"
-        "dm_mod"
       ];
 
       initrdPackages = prev.initrdPackages ++ [

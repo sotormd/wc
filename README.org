@@ -33,6 +33,10 @@ The task involves the following goals:
 - Encrypt a disk in-place using ~cryptsetup reencrypt~
 - TPM 2.0 unlocking with relevant PCRs
 
+This document covers all 5 expected steps in the original task document.
+
+All the relevant configurations are tangled using ~org-babel~ from this document.
+
 *** Notation for command blocks
 
 Command blocks starting with ~$~ are to be ran on the host.
@@ -236,12 +240,12 @@ For this task, we will create a generation that never leaves initrd.
       final: prev:
       {
         initrdModules = prev.initrdModules ++ [
+          "dm_mod"
           "cbc"
           "xts"
           "encrypted_keys"
           "trusted"
           "dm_crypt"
-          "dm_mod"
         ];
 
         initrdPackages = prev.initrdPackages ++ [
@@ -374,6 +378,17 @@ unlock the luks device automatically.
     finalConfiguration = configuration.extend (
       final: prev:
       {
+        initrdModules = prev.initrdModules ++ [
+          "dm_mod"
+          "cbc"
+          "xts"
+          "encrypted_keys"
+          "trusted"
+          "dm_crypt"
+         ];
+
+        initrdPackages = prev.initrdPackages ++ [ final.pkgs.cryptsetup ];
+
         initrdFindRealRootCommands = ''
           boot=/dev/sda1
           cryptroot=/dev/sda2
