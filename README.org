@@ -23,6 +23,8 @@ This document covers all 5 expected steps in the original task document.
 
 All the relevant configurations are tangled using ~org-babel~ from this document.
 
+There is also a ~wf-recorder~ recording of an entire run in [[recording.mkv]].
+
 *** Notation for command blocks
 
 Command blocks starting with ~$~ are to be ran on the host.
