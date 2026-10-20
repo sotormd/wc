@@ -1,3 +1,4 @@
+
 #+TITLE: WebClub (Systems & Security) & IRIS
 #+AUTHOR: sotormd
 #+EMAIL: sotormd@proton.me
@@ -354,7 +355,7 @@ Similarly, var:
   # mount -o bind,nosuid,nodev /root/persist/var /root/var
 #+END_SRC
 
-The tree under ~/root~ is not identical to what the foobar initrd constructs, we can ~switch_root~ safely.
+The tree under ~/root~ is now identical to what the foobar initrd constructs, we can ~switch_root~ safely.
 
 #+BEGIN_SRC console
   # exec switch_root /root "$BOOTED_CLOSURE/init"
