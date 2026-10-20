@@ -621,3 +621,6 @@ UUIDS:
   /dev/sda1: LABEL="FOOBAR-ESP" UUID="4C4B-71A7" TYPE="vfat"
 #+END_SRC
 
+~wf-recorder~ recording of a full run:
+
+[[recording.mkv][recording]]
